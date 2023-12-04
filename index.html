@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Decentralized Learning Platform</title>
+    <link rel="stylesheet" href="index.css" />
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>D-Udemy!</h1>
+      </header>
+
+      <!-- web5 loading indicator -->
+      <div id="loadingIndicator" style="display: none">
+        <p>Connecting to Web5. Please wait...</p>
+      </div>
+
+      <!-- Course Selection Dropdown -->
+      <section id="courseSelection" class="course-dropdown">
+        <h2>Select a Course</h2>
+        <select id="courseDropdown">
+          <option>Loading courses...</option>
+          <!-- Options will be dynamically added here -->
+        </select>
+      </section>
+
+      <!-- Course Creation Form -->
+      <h2>Create a New Course</h2>
+      <form id="courseCreationForm" class="course-form">
+        <label for="courseTitle">Course Title:</label>
+        <input type="text" id="courseTitle" required />
+
+        <label for="courseDescription">Course Description:</label>
+        <textarea id="courseDescription" required></textarea>
+
+        <label for="courseAuthor">Author:</label>
+        <input type="text" id="courseAuthor" required />
+
+        <button type="button" id="createCourseButton">Create New Course</button>
+      </form>
+
+      <!-- show courseId that was created -->
+      <p id="displayCourseID"></p>
+
+      <!-- Lesson Upload Form -->
+      <div
+        id="lessonUploadSection"
+        class="lesson-upload-section"
+        style="display: none"
+      >
+        <h2>Upload New Lesson</h2>
+        <form id="lessonUploadForm" class="lesson-form">
+          <label for="courseIdForLesson">Course ID:</label>
+          <input
+            type="text"
+            id="courseIdForLesson"
+            placeholder="Enter ID of the course"
+            required
+          />
+
+          <label for="lessonTitle">Lesson Title:</label>
+          <input type="text" id="lessonTitle" required />
+
+          <input type="file" id="videoInput" accept="video/*" />
+          <label for="publishNow">Publish Now:</label>
+          <input type="checkbox" id="publishNow" checked />
+
+          <label for="publishDate">Publish by Date:</label>
+          <input type="datetime-local" id="publishDate" disabled />
+
+          <button type="button" id="lessonUploadButton">Upload Lesson</button>
+        </form>
+      </div>
+
+      <div>
+        <button id="issueButton">Issue Credential</button>
+      </div>
+
+      <!-- Lessons Section -->
+      <section id="lessonsSection" class="lessons" style="display: none">
+        <h2>Your Lessons</h2>
+        <ul id="lessonList"></ul>
+      </section>
+    </div>
+    <!-- beginning of my JS  -->
+    <script src="dist/bundle.js"></script>
+  </body>
+</html>
