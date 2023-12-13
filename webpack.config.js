@@ -4,28 +4,27 @@ import process from "process";
 import HtmlWebpackPlugin from "html-webpack-plugin";
 
 const config = {
-  entry: "./src/index.js", // Your main JS file
+  entry: "./src/index.js",
   output: {
-    filename: "bundle.js", // The output bundle
-    path: path.resolve(process.cwd(), "dist"), // Output directory
-    publicPath: "/", // Needed for webpack-dev-server
+    filename: "bundle.js",
+    path: path.resolve(process.cwd(), "dist"),
+    publicPath: "/",
   },
-  mode: "development", // Use 'production' for production builds
+  mode: "development",
   devServer: {
     static: {
       directory: path.join(process.cwd()),
     },
     compress: true,
-    port: 9000, // You can choose any port
-    open: true, // Opens the browser after server had been started
-    historyApiFallback: true, // For single-page applications
+    port: 9000,
+    open: true,
+    historyApiFallback: true,
     hot: false,
   },
   resolve: {
     fallback: {
       stream: path.resolve(process.cwd(), "node_modules/stream-browserify"),
       crypto: path.resolve(process.cwd(), "node_modules/crypto-browserify"),
-      // Add other polyfills as needed
     },
   },
   plugins: [
@@ -39,7 +38,6 @@ const config = {
       template: "index.html",
     }),
   ],
-  // Add other configurations like loaders here
 };
 
 export default config;

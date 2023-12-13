@@ -1,18 +1,27 @@
 {
   "devDependencies": {
     "html-webpack-plugin": "^5.5.3",
+    "install": "^0.13.0",
+    "nodemon": "^3.0.2",
+    "npm": "^10.2.5",
     "prettier": "3.0.3",
     "webpack": "^5.89.0",
     "webpack-cli": "^5.1.4",
     "webpack-dev-server": "^4.15.1"
   },
   "scripts": {
-    "start": "webpack serve --open",
-    "build": "webpack --mode production"
+    "start": "nodemon --watch src --watch index.html --exec 'npm run build && node server.js'",
+    "build": "webpack --mode development"
   },
   "dependencies": {
-    "@web5/api": "^0.8.2",
-    "@web5/credentials": "^0.3.1",
+    "@web5/agent": "^0.2.5",
+    "@web5/api": "^0.8.3",
+    "@web5/common": "^0.2.2",
+    "@web5/credentials": "^0.3.2",
+    "@web5/crypto": "^0.2.3",
+    "@web5/dids": "^0.2.2",
+    "@web5/identity-agent": "^0.2.5",
+    "@web5/user-agent": "^0.2.5",
     "crypto-browserify": "^3.12.0",
     "process": "^0.11.10",
     "stream-browserify": "^3.0.0"

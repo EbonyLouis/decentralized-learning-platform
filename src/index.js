@@ -1,10 +1,34 @@
 import { Web5 } from "@web5/api";
 import { VerifiableCredential, PresentationExchange } from "@web5/credentials";
-import { DidKeyMethod, utils as didUtils } from "@web5/dids";
-import { Ed25519, Jose } from "@web5/crypto";
+import {
+  DidKeyMethod,
+  utils as didUtils,
+  DidIonMethod,
+  DidResolverCacheLevel,
+  DidResolver,
+} from "@web5/dids";
+import { Ed25519, EdDsaAlgorithm } from "@web5/crypto";
+import { Web5UserAgent } from "@web5/user-agent";
+import { LevelStore } from "@web5/common";
+import {
+  DidManager,
+  DidStoreDwn,
+  DwnManager,
+  IdentityManager,
+  IdentityStoreDwn,
+  LocalKms,
+  KeyManager,
+  KeyStoreDwn,
+  PrivateKeyStoreDwn,
+  AppDataVault,
+  Web5RpcClient,
+  SyncManagerLevel,
+} from "@web5/agent";
+import { IdentityAgent } from "@web5/identity-agent";
 
 let web5;
-let myDid;
+// let myDid;
+let existingDid;
 let selectedCourseId;
 
 const protocolDefinition = {
@@ -86,17 +110,16 @@ const protocolDefinition = {
 ("course/content/video");
 ("course/comments");
 
-async function configProtocol() {
+async function configProtocol(web5, existingDid) {
   const { protocol, status } = await web5.dwn.protocols.configure({
     message: {
       definition: protocolDefinition,
     },
   });
-  await protocol.send(myDid);
+  await protocol.send(existingDid);
   return protocol;
 }
 
-//   courses show on load, remove null records
 async function fetchCoursesByInstructor() {
   const queryOptions = {
     message: {
@@ -136,7 +159,6 @@ async function fetchCoursesByInstructor() {
   return validCourses;
 }
 
-// creates course
 function handleCourseCreation() {
   const title = document.getElementById("courseTitle").value;
   const description = document.getElementById("courseDescription").value;
@@ -150,14 +172,11 @@ function handleCourseCreation() {
   createCourseData(web5, courseData);
 }
 
-// create course data function
 async function createCourseData(web5, courseData) {
   try {
     if (!courseData.title || !courseData.description || !courseData.author) {
       throw new Error("Invalid course metadata");
     }
-
-    //
     const record = {
       data: {
         title: courseData.title,
@@ -194,6 +213,8 @@ async function createCourseData(web5, courseData) {
     document.getElementById("displayCourseID").innerText =
       "Created Course ID: " + result.record.id;
 
+    document.getElementById("courseIdForLesson").value = courseId;
+
     document.getElementById("lessonUploadSection").style.display = "block";
 
     return result.record.id;
@@ -203,7 +224,6 @@ async function createCourseData(web5, courseData) {
   }
 }
 
-// function to listen to the upload lesson button
 async function handleLessonUpload() {
   try {
     const courseIdElement = document.getElementById("courseIdForLesson");
@@ -218,24 +238,31 @@ async function handleLessonUpload() {
       return;
     }
 
-    const videoFile = videoInputElement.files[0];
     const videoBuffer = await new Blob([videoInputElement.files[0]], {
       type: "video/mp4",
     });
 
-    const lessonData = {
-      lessonTitle: lessonTitle,
-    };
+    const lessonData = { lessonTitle: lessonTitle };
 
     await createCourseLesson(web5, courseId, lessonData, videoBuffer);
 
     lessonTitleElement.value = "";
     videoInputElement.value = "";
-
-    alert("Lesson successfully uploaded!");
-    if (selectedCourseId) {
-      fetchAndDisplayLessons(selectedCourseId);
+    const filePathDisplay = videoInputElement
+      .closest(".file-field")
+      .querySelector(".file-path");
+    if (filePathDisplay) {
+      filePathDisplay.value = "";
     }
+
+    // alert("Lesson successfully uploaded!");
+
+    document.getElementById("courseCreationForm").style.display = "none";
+
+    await fetchAndDisplayLessons(courseId);
+
+    const lessonsSection = document.getElementById("lessonsSection");
+    lessonsSection.style.display = "block";
   } catch (error) {
     console.error("Error handling lesson upload:", error);
     alert("Error uploading the lesson. Try again. 🙃");
@@ -267,7 +294,6 @@ async function uploadVideo(web5, courseId, videoBuffer, message) {
   }
 }
 
-// create course lesson function:
 async function createCourseLesson(web5, courseId, lessonData, videoBuffer) {
   try {
     if (!lessonData.lessonTitle || !videoBuffer) {
@@ -340,7 +366,6 @@ async function createCourseLesson(web5, courseId, lessonData, videoBuffer) {
   }
 }
 
-//   fetch and display lessons(content) when clicked
 async function fetchAndDisplayLessons(courseId) {
   console.log("Fetching lessons for courseId:", courseId);
   try {
@@ -357,7 +382,6 @@ async function fetchAndDisplayLessons(courseId) {
 
     const { records } = await web5.dwn.records.query(queryOptions);
 
-    //get lesson data with recordID
     const lessons = await Promise.all(
       records.map(async (record) => {
         try {
@@ -392,7 +416,6 @@ async function fetchAndDisplayLessons(courseId) {
   }
 }
 
-//  display lessons
 async function displayLessons(lessons) {
   const lessonListElement = document.getElementById("lessonList");
   lessonListElement.innerHTML = "";
@@ -429,12 +452,12 @@ async function displayLessons(lessons) {
       deleteLesson(lesson.id, selectedCourseId)
     );
     lessonItem.appendChild(deleteButton);
+    // lessonItem.className = "fade-in";
 
     lessonListElement.appendChild(lessonItem);
   }
 }
 
-//   get video url
 async function resolveVideoUrl(videoId) {
   try {
     console.log("Attempting to resolve video URL for videoId:", videoId);
@@ -465,7 +488,6 @@ async function resolveVideoUrl(videoId) {
   }
 }
 
-//   delete lessons
 async function deleteLesson(lessonId, courseId) {
   try {
     await web5.dwn.records.delete({ message: { recordId: lessonId } });
@@ -480,7 +502,6 @@ async function deleteLesson(lessonId, courseId) {
   }
 }
 
-// Function to display courses
 function displayCourses(courses) {
   const courseDropdown = document.getElementById("courseDropdown");
   courseDropdown.innerHTML = "";
@@ -509,22 +530,287 @@ function displayCourses(courses) {
   });
 }
 
-function handleIssueCredentialClick() {
-  alert("Button clicked");
+class TeacherCredentialData {
+  constructor(name, email, role) {
+    this.name = name;
+    this.email = email;
+    this.role = role;
+  }
 }
 
-// run dudemy
-async function initPlatform() {
+async function handleTeacherRegistration(event) {
+  event.preventDefault();
+  console.log("button clicked");
+
+  try {
+    const teacherName = document.getElementById("teacherName").value;
+    const teacherEmail = document.getElementById("teacherEmail").value;
+
+    if (!teacherName || !teacherEmail) {
+      alert("Please enter your name and email.");
+      return;
+    }
+
+    const issuerDid = await DidKeyMethod.create();
+    const subjectDid = myDid;
+
+    const teacherData = new TeacherCredentialData(
+      teacherName,
+      teacherEmail,
+      "Instructor"
+    );
+
+    console.log("Teacher Data:", teacherData);
+    const teacherCredential = VerifiableCredential.create({
+      type: "TeacherCredential",
+      issuer: issuerDid.did,
+      subject: subjectDid,
+      data: teacherData,
+    });
+
+    console.log("Unsigned VC: \n " + teacherCredential.toString() + "\n");
+
+    const { privateKeyJwk } = issuerDid.keySet.verificationMethodKeys[0];
+
+    const signOptions = {
+      issuerDid: issuerDid.did,
+      subjectDid: subjectDid,
+      kid: `${issuerDid.did}#${issuerDid.did.split(":")[2]}`,
+      signer: async (data) => await Ed25519.sign({ data, key: privateKeyJwk }),
+    };
+
+    const signedVcJwt = await teacherCredential.sign(signOptions);
+    console.log("\nSigned VC: \n" + signedVcJwt + "\n");
+
+    sessionStorage.setItem("teacherCredential", signedVcJwt);
+
+    const { record } = await web5.dwn.records.create({
+      data: signedVcJwt,
+
+      message: {
+        schema: "TeacherCredential",
+        dataFormat: "application/vc+jwt",
+        published: true,
+      },
+    });
+
+    try {
+      const sendResult = await record.send(myDid);
+      console.log("Record sent successfully:", sendResult);
+    } catch (error) {
+      console.error("Error sending record:", error);
+    }
+
+    let { record: readRecord } = await web5.dwn.records.read({
+      message: {
+        filter: {
+          recordId: record.id,
+        },
+      },
+    });
+
+    const readVcJwt = await readRecord.data.text();
+    console.log("\nVC Record: \n" + readVcJwt + "\n");
+
+    console.log("Finished!");
+
+    console.log("Teacher registered with signed  VC:", signedVcJwt);
+    await handleTeacherLogin(teacherCredential);
+  } catch (error) {
+    console.error("Error during teacher registration:", error);
+  }
+}
+
+async function handleTeacherLogin() {
+  try {
+    let teacherCredential = sessionStorage.getItem("teacherCredential");
+
+    if (!teacherCredential) {
+      console.log("Querying DWN for teacher credential...");
+
+      const teacherDid = myDid;
+      const response = await web5.dwn.records.query({
+        from: teacherDid,
+        message: {
+          filter: {
+            schema: "TeacherCredential",
+            dataFormat: "application/vc+jwt",
+          },
+        },
+      });
+
+      if (!response || response.records.length === 0) {
+        throw new Error("Teacher credential not found in DWN");
+      }
+
+      teacherCredential = await response.records[0].data.text();
+      sessionStorage.setItem("teacherCredential", teacherCredential);
+    }
+
+    if (!teacherCredential) {
+      throw new Error("Teacher credential not found");
+    }
+
+    await VerifiableCredential.verify(teacherCredential);
+    console.log("Teacher credential verified. Login successful.");
+    updateUIForLoggedInTeacher(teacherCredential);
+  } catch (error) {
+    console.error("Teacher credential verification failed:", error);
+    const messageContainer = document.getElementById("messageContainer");
+    messageContainer.innerText = "No account found, please register.";
+    messageContainer.style.display = "block";
+  }
+}
+
+function updateUIForLoggedInTeacher(teacherCredential) {
+  const parsedVc = VerifiableCredential.parseJwt(teacherCredential);
+  console.log("parsevc:", parsedVc);
+
+  const teacherName = parsedVc.vcDataModel.credentialSubject.name;
+
+  document.getElementById("loginButton").style.display = "none";
+  document.getElementById("logoutButton").style.display = "block";
+  document.getElementById("messageContainer").style.display = "none";
+
+  const greetingElement = document.getElementById("greeting");
+  if (greetingElement) {
+    greetingElement.textContent = `Welcome, ${teacherName}!`;
+  } else {
+    const greeting = document.createElement("div");
+    greeting.setAttribute("id", "greeting");
+    greeting.textContent = `Welcome, ${teacherName}!`;
+    document.body.insertBefore(greeting, document.body.firstChild);
+  }
+
+  document.getElementById("teacherRegistrationForm").style.display = "none";
+  document.getElementById("courseSelection").style.display = "block";
+  document.getElementById("courseCreationForm").style.display = "block";
+}
+
+function handleTeacherLogout() {
+  sessionStorage.removeItem("teacherCredential");
+  updateUIForLoggedOutTeacher();
+}
+
+function updateUIForLoggedOutTeacher() {
+  document.getElementById("loginButton").style.display = "block";
+  document.getElementById("logoutButton").style.display = "none";
+
+  const greetingElement = document.getElementById("greeting");
+  if (greetingElement) {
+    greetingElement.remove();
+  }
+
+  document.getElementById("courseSelection").style.display = "none";
+  document.getElementById("courseCreationForm").style.display = "none";
+  document.getElementById("lessonUploadSection").style.display = "none";
+  document.getElementById("lessonsSection").style.display = "none";
+  document.getElementById("displayCourseID").style.display = "none";
+
+  document.getElementById("teacherRegistrationForm").style.display = "block";
+  window.location.reload();
+}
+
+// working way to start app w/o existing Did & passphrase
+// async function initPlatform() {
+//   try {
+//     document.getElementById("loadingIndicator").style.display = "block";
+
+//     const connection = await Web5.connect();
+//     web5 = connection.web5;
+//     myDid = connection.did;
+
+//     const courseProtocol = await configProtocol();
+
+//     console.log("starting with DID:", myDid);
+
+//     document.getElementById("loadingIndicator").style.display = "none";
+//     console.log("protocol:", courseProtocol);
+
+//     const courses = await fetchCoursesByInstructor();
+//     if (courses) {
+//       displayCourses(courses);
+//     }
+//   } catch (error) {
+//     console.error("Error initializing the platform:", error);
+//   }
+// }
+
+// identity agent test
+async function initPlatform(existingDid, passphrase) {
   try {
     document.getElementById("loadingIndicator").style.display = "block";
 
-    const connection = await Web5.connect();
-    web5 = connection.web5;
-    myDid = connection.did;
+    const appData = new AppDataVault({
+      store: new LevelStore("data/agent/vault"),
+    });
 
-    const courseProtocol = await configProtocol();
+    const didManager = new DidManager({
+      didMethods: [DidIonMethod, DidKeyMethod],
+      store: new DidStoreDwn(),
+    });
 
-    console.log("starting with DID:", myDid);
+    const didResolver = new DidResolver({
+      didResolvers: [DidIonMethod, DidKeyMethod],
+    });
+
+    const dwnManager = await DwnManager.create({ didResolver });
+
+    const identityManager = new IdentityManager({
+      store: new IdentityStoreDwn(),
+    });
+
+    const localKmsDwn = new LocalKms({
+      kmsName: "local",
+      keyStore: new KeyStoreDwn({
+        schema: "https://identity.foundation/schemas/web5/kms-key",
+      }),
+      privateKeyStore: new PrivateKeyStoreDwn(),
+    });
+
+    const localKmsMemory = new LocalKms({
+      kmsName: "memory",
+    });
+
+    const keyManager = new KeyManager({
+      kms: {
+        local: localKmsDwn,
+        memory: localKmsMemory,
+      },
+      store: new KeyStoreDwn({
+        schema: "https://identity.foundation/schemas/web5/managed-key",
+      }),
+    });
+
+    const rpcClient = new Web5RpcClient();
+
+    const syncManager = new SyncManagerLevel();
+
+    const agentOptions = {
+      agentDid: existingDid,
+      appData,
+      didManager,
+      didResolver,
+      dwnManager,
+      identityManager,
+      keyManager,
+      rpcClient,
+      syncManager,
+    };
+
+    const identityAgent = await IdentityAgent.create(agentOptions);
+    await identityAgent.start({ passphrase });
+
+    const { web5 } = await Web5.connect({
+      connectedDid: existingDid,
+      agent: identityAgent,
+    });
+
+    console.log("web5:", web5);
+
+    const courseProtocol = await configProtocol(web5, existingDid);
+
+    console.log("starting with DID:", existingDid);
 
     document.getElementById("loadingIndicator").style.display = "none";
     console.log("protocol:", courseProtocol);
@@ -538,6 +824,92 @@ async function initPlatform() {
   }
 }
 
+//user agent test
+// async function initWeb5UserAgentWithDid(existingDid) {
+//   const appData = new AppDataVault({
+//     store: new LevelStore("DATA/AGENT/APPDATA"),
+//   });
+
+//   const didManager = new DidManager({
+//     didMethods: [DidIonMethod, DidKeyMethod],
+//     store: new DidStoreDwn(),
+//   });
+
+//   const didResolver = new DidResolver({
+//     cache: new DidResolverCacheLevel(),
+//     didResolvers: [DidIonMethod, DidKeyMethod],
+//   });
+
+//   const dwnManager = await DwnManager.create({ didResolver });
+
+//   const identityManager = new IdentityManager({
+//     store: new IdentityStoreDwn(),
+//   });
+
+//   const localKmsDwn = new LocalKms({
+//     kmsName: "local",
+//     keyStore: new KeyStoreDwn({
+//       schema: "https://identity.foundation/schemas/web5/kms-key",
+//     }),
+//     privateKeyStore: new PrivateKeyStoreDwn(),
+//   });
+
+//   const localKmsMemory = new LocalKms({
+//     kmsName: "memory",
+//   });
+
+//   const keyManager = new KeyManager({
+//     kms: {
+//       local: localKmsDwn,
+//       memory: localKmsMemory,
+//     },
+//     store: new KeyStoreDwn({
+//       schema: "https://identity.foundation/schemas/web5/managed-key",
+//     }),
+//   });
+
+//   const rpcClient = new Web5RpcClient();
+
+//   const syncManager = new SyncManagerLevel();
+
+//   const userAgentOptions = {
+//     agentDid: existingDid,
+//     appData,
+//     didManager,
+//     didResolver,
+//     dwnManager,
+//     identityManager,
+//     keyManager,
+//     rpcClient,
+//     syncManager,
+//   };
+
+//   const userAgent = new Web5UserAgent(userAgentOptions);
+
+//   await userAgent.connectWithExistingDid(existingDid);
+
+//   return userAgent;
+// }
+
+// event listeners
+// const teacherNameInput = document.getElementById("teacherName");
+// const messageContainer = document.getElementById("messageContainer");
+
+// teacherNameInput.addEventListener("focus", function () {
+//   messageContainer.innerText = "";
+//   messageContainer.style.display = "none";
+// });
+
+document
+  .getElementById("registerButton")
+  .addEventListener("click", handleTeacherRegistration);
+
+document
+  .getElementById("loginButton")
+  .addEventListener("click", handleTeacherLogin);
+document
+  .getElementById("logoutButton")
+  .addEventListener("click", handleTeacherLogout);
 document
   .getElementById("createCourseButton")
   .addEventListener("click", handleCourseCreation);
@@ -552,10 +924,12 @@ document.getElementById("publishNow").addEventListener("change", function () {
     publishDateInput.disabled = false;
   }
 });
-document
-  .getElementById("issueButton")
-  .addEventListener("click", handleIssueCredentialClick);
 
 window.onload = function () {
-  initPlatform();
+  const existingDid =
+    "did:ion:EiDuQnNAYkdK3-3ExIQcqgXuhPkBuCnMHWps7IKDt5VXug:eyJkZWx0YSI6eyJwYXRjaGVzIjpbeyJhY3Rpb24iOiJyZXBsYWNlIiwiZG9jdW1lbnQiOnsicHVibGljS2V5cyI6W3siaWQiOiJkd24tc2lnIiwicHVibGljS2V5SndrIjp7ImNydiI6IkVkMjU1MTkiLCJrdHkiOiJPS1AiLCJ4IjoieV9wRWRmcnowU0RLRkJ2S01fOUdydmZ2WGtTT3pNV0pEeVFiTk13ZHl0NCJ9LCJwdXJwb3NlcyI6WyJhdXRoZW50aWNhdGlvbiJdLCJ0eXBlIjoiSnNvbldlYktleTIwMjAifSx7ImlkIjoiZHduLWVuYyIsInB1YmxpY0tleUp3ayI6eyJjcnYiOiJzZWNwMjU2azEiLCJrdHkiOiJFQyIsIngiOiIyT2lFZVRVSW1uR0oxUjNPNlhjYWlYdHZoQVZ4UG9PUU12RDZHdFRYNV93IiwieSI6ImczUVg2R0QzMXR6NjIwVy1XRV9sQ05jV1FmcTFRd3VrOFJaNjJZczBFZlkifSwicHVycG9zZXMiOlsia2V5QWdyZWVtZW50Il0sInR5cGUiOiJKc29uV2ViS2V5MjAyMCJ9XSwic2VydmljZXMiOlt7ImlkIjoiZHduIiwic2VydmljZUVuZHBvaW50Ijp7ImVuY3J5cHRpb25LZXlzIjpbIiNkd24tZW5jIl0sIm5vZGVzIjpbImh0dHBzOi8vZHduLnRiZGRldi5vcmcvZHduNSIsImh0dHBzOi8vZHduLnRiZGRldi5vcmcvZHduMyJdLCJzaWduaW5nS2V5cyI6WyIjZHduLXNpZyJdfSwidHlwZSI6IkRlY2VudHJhbGl6ZWRXZWJOb2RlIn1dfX1dLCJ1cGRhdGVDb21taXRtZW50IjoiRWlCaUZrcVYtaC1nU3czOTA3QzQ3VUtsT1ZvMU1ueUI0azlFME1rS01yODdNUSJ9LCJzdWZmaXhEYXRhIjp7ImRlbHRhSGFzaCI6IkVpQjJTUW9VRVdqRGZpUlFrOGFhODJhOWpUemltX0lfa181SXBOSGJxdC1vVFEiLCJyZWNvdmVyeUNvbW1pdG1lbnQiOiJFaUF1UjZYai1xX1hXWWhDSTJBUjdvRHl0SzFsZXU0V2JOeUJyRm55YjB6N1FnIn19";
+  const passphrase = "temporary-passphrase-for-testing";
+  initPlatform(existingDid, passphrase);
+  // initPlatform();
+  // handleTeacherLogin();
 };

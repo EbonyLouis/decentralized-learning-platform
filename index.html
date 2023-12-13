@@ -4,87 +4,261 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Decentralized Learning Platform</title>
-    <link rel="stylesheet" href="index.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css"
+    />
+    <style>
+      body {
+        background-color: #121212;
+        color: #fff;
+      }
+      .card,
+      nav,
+      .card-panel {
+        background-color: #1e1e1e;
+      }
+      .input-field label,
+      .input-field .prefix {
+        color: #fff;
+      }
+      .input-field input[type="text"]:focus + label,
+      .input-field input[type="email"]:focus + label,
+      .input-field input[type="datetime-local"]:focus + label {
+        color: #ee6e73;
+      }
+      .input-field input[type="text"]:focus,
+      .input-field input[type="email"]:focus,
+      .input-field input[type="datetime-local"]:focus {
+        border-bottom: 1px solid #ee6e73;
+        box-shadow: 0 1px 0 0 #ee6e73;
+      }
+      .input-field .file-path {
+        color: #fff;
+      }
+      .collection {
+        border: none;
+      }
+      .collection .collection-item {
+        background-color: transparent;
+        padding-left: 20px;
+        min-height: 50px;
+        line-height: 1.5rem;
+        border-bottom: 1px solid #555;
+      }
+      .lesson-list-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .lesson-video {
+        width: 30%;
+        margin-right: 10px;
+      }
+      .section h2 {
+        font-size: 2.5rem;
+      }
+      .input-field label {
+        position: absolute;
+        top: 0;
+        left: 0;
+        font-size: 1rem;
+        cursor: text;
+        transition:
+          transform 0.2s ease-out,
+          color 0.2s ease-out;
+        transform-origin: 0 0;
+      }
+
+      .input-field label.active {
+        transform: translateY(-14px) scale(0.8);
+        color: #ee6e73;
+      }
+
+      .input-field input[type="datetime-local"]:not(.browser-default) {
+        margin-bottom: 0;
+      }
+      /* .fade-in {
+        animation: fadeIn 5s; 
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      } */
+    </style>
   </head>
   <body>
     <div class="container">
-      <header>
+      <header class="center-align">
         <h1>D-Udemy!</h1>
       </header>
 
-      <!-- web5 loading indicator -->
-      <div id="loadingIndicator" style="display: none">
-        <p>Connecting to Web5. Please wait...</p>
+      <div id="loadingIndicator" class="progress" style="display: none">
+        <div class="indeterminate"></div>
       </div>
 
-      <!-- Course Selection Dropdown -->
-      <section id="courseSelection" class="course-dropdown">
+      <div id="greeting"></div>
+
+      <div class="card" id="teacherRegistrationForm">
+        <div class="card-content">
+          <span class="card-title">Teacher Registration</span>
+          <form>
+            <div class="input-field">
+              <input id="teacherName" type="text" class="validate" required />
+              <label for="teacherName">Name:</label>
+            </div>
+            <div class="input-field">
+              <input id="teacherEmail" type="email" class="validate" required />
+              <label for="teacherEmail">Email:</label>
+            </div>
+            <div
+              class="button-container"
+              style="display: flex; justify-content: space-between"
+            >
+              <button
+                type="submit"
+                id="registerButton"
+                class="btn waves-effect waves-light"
+              >
+                Register
+              </button>
+              <button
+                type="button"
+                id="loginButton"
+                class="btn waves-effect waves-light green"
+              >
+                Login
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="section">
+        <button
+          id="logoutButton"
+          class="btn waves-effect waves-light red"
+          style="display: none"
+        >
+          Logout
+        </button>
+      </div>
+
+      <div id="messageContainer" style="color: red; display: none"></div>
+
+      <section id="courseSelection" class="section" style="display: none">
         <h2>Select a Course</h2>
-        <select id="courseDropdown">
+        <select id="courseDropdown" class="browser-default">
           <option>Loading courses...</option>
-          <!-- Options will be dynamically added here -->
         </select>
       </section>
 
-      <!-- Course Creation Form -->
-      <h2>Create a New Course</h2>
-      <form id="courseCreationForm" class="course-form">
-        <label for="courseTitle">Course Title:</label>
-        <input type="text" id="courseTitle" required />
+      <div id="courseCreationForm" class="card" style="display: none">
+        <div class="card-content">
+          <span class="card-title">Create a New Course</span>
+          <form class="course-form">
+            <div class="input-field">
+              <input id="courseTitle" type="text" class="validate" required />
+              <label for="courseTitle">Course Title:</label>
+            </div>
+            <div class="input-field">
+              <textarea
+                id="courseDescription"
+                class="materialize-textarea"
+                required
+              ></textarea>
+              <label for="courseDescription">Course Description:</label>
+            </div>
+            <div class="input-field">
+              <input id="courseAuthor" type="text" class="validate" required />
+              <label for="courseAuthor">Author:</label>
+            </div>
+            <button
+              type="button"
+              id="createCourseButton"
+              class="btn waves-effect waves-light"
+            >
+              Create New Course
+            </button>
+          </form>
+        </div>
+      </div>
 
-        <label for="courseDescription">Course Description:</label>
-        <textarea id="courseDescription" required></textarea>
-
-        <label for="courseAuthor">Author:</label>
-        <input type="text" id="courseAuthor" required />
-
-        <button type="button" id="createCourseButton">Create New Course</button>
-      </form>
-
-      <!-- show courseId that was created -->
       <p id="displayCourseID"></p>
 
-      <!-- Lesson Upload Form -->
-      <div
-        id="lessonUploadSection"
-        class="lesson-upload-section"
-        style="display: none"
-      >
-        <h2>Upload New Lesson</h2>
-        <form id="lessonUploadForm" class="lesson-form">
-          <label for="courseIdForLesson">Course ID:</label>
-          <input
-            type="text"
-            id="courseIdForLesson"
-            placeholder="Enter ID of the course"
-            required
-          />
+      <div id="lessonUploadSection" class="card" style="display: none">
+        <div class="card-content">
+          <span class="card-title">Upload New Lesson</span>
+          <form id="lessonUploadForm" class="lesson-form">
+            <div class="input-field">
+              <input
+                type="text"
+                id="courseIdForLesson"
+                placeholder="Enter ID of the course"
+                required
+              />
+              <label for="courseIdForLesson">Course ID:</label>
+            </div>
 
-          <label for="lessonTitle">Lesson Title:</label>
-          <input type="text" id="lessonTitle" required />
+            <div class="input-field">
+              <input type="text" id="lessonTitle" required />
+              <label for="lessonTitle">Lesson Title:</label>
+            </div>
 
-          <input type="file" id="videoInput" accept="video/*" />
-          <label for="publishNow">Publish Now:</label>
-          <input type="checkbox" id="publishNow" checked />
+            <div class="file-field input-field">
+              <div class="btn">
+                <span>File</span>
+                <input type="file" id="videoInput" accept="video/*" />
+              </div>
+              <div class="file-path-wrapper">
+                <input
+                  class="file-path validate"
+                  type="text"
+                  placeholder="Upload a video"
+                />
+              </div>
+            </div>
 
-          <label for="publishDate">Publish by Date:</label>
-          <input type="datetime-local" id="publishDate" disabled />
+            <p>
+              <label>
+                <input type="checkbox" id="publishNow" checked />
+                <span>Publish Now:</span>
+              </label>
+            </p>
 
-          <button type="button" id="lessonUploadButton">Upload Lesson</button>
-        </form>
+            <div class="input-field">
+              <input
+                type="datetime-local"
+                id="publishDate"
+                class="datepicker"
+                disabled
+              />
+              <label for="publishDate">Publish by Date:</label>
+            </div>
+
+            <button
+              type="button"
+              id="lessonUploadButton"
+              class="btn waves-effect waves-light"
+            >
+              Upload Lesson
+            </button>
+          </form>
+        </div>
       </div>
 
-      <div>
-        <button id="issueButton">Issue Credential</button>
-      </div>
-
-      <!-- Lessons Section -->
-      <section id="lessonsSection" class="lessons" style="display: none">
+      <section id="lessonsSection" class="section" style="display: none">
         <h2>Your Lessons</h2>
-        <ul id="lessonList"></ul>
+        <ul id="lessonList" class="collection"></ul>
       </section>
     </div>
-    <!-- beginning of my JS  -->
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
     <script src="dist/bundle.js"></script>
   </body>
 </html>
