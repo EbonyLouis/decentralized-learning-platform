@@ -25,6 +25,7 @@ const config = {
     fallback: {
       stream: path.resolve(process.cwd(), "node_modules/stream-browserify"),
       crypto: path.resolve(process.cwd(), "node_modules/crypto-browserify"),
+      buffer: path.resolve("buffer/"),
     },
   },
   plugins: [

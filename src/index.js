@@ -1,4 +1,4 @@
-import { Web5 } from "@web5/api";
+import { getTechPreviewDwnEndpoints, Web5 } from "@web5/api";
 import { VerifiableCredential, PresentationExchange } from "@web5/credentials";
 import {
   DidKeyMethod,
@@ -6,6 +6,7 @@ import {
   DidIonMethod,
   DidResolverCacheLevel,
   DidResolver,
+  DidDhtMethod,
 } from "@web5/dids";
 import { Ed25519, EdDsaAlgorithm } from "@web5/crypto";
 import { Web5UserAgent } from "@web5/user-agent";
@@ -25,9 +26,10 @@ import {
   SyncManagerLevel,
 } from "@web5/agent";
 import { IdentityAgent } from "@web5/identity-agent";
+import { Buffer } from "buffer";
+window.Buffer = Buffer;
 
 let web5;
-// let myDid;
 let existingDid;
 let selectedCourseId;
 
@@ -110,7 +112,8 @@ const protocolDefinition = {
 ("course/content/video");
 ("course/comments");
 
-async function configProtocol(web5, existingDid) {
+async function configProtocol() {
+  // console.log(existingDid, web5);
   const { protocol, status } = await web5.dwn.protocols.configure({
     message: {
       definition: protocolDefinition,
@@ -196,7 +199,7 @@ async function createCourseData(web5, courseData) {
     const result = await web5.dwn.records.create(record);
     console.log(await result.record.data.json());
 
-    await result.record.send(myDid);
+    await result.record.send(existingDid);
     console.log("Course created with ID:", result.record.id);
     let courseId = result.record.id;
 
@@ -284,7 +287,7 @@ async function uploadVideo(web5, courseId, videoBuffer, message) {
     const result = await web5.dwn.records.create(record);
     console.log(result);
 
-    await result.record.send(myDid);
+    await result.record.send(existingDid);
 
     console.log("Video uploaded with ID:", result.record.id);
     return result.record.id;
@@ -552,7 +555,7 @@ async function handleTeacherRegistration(event) {
     }
 
     const issuerDid = await DidKeyMethod.create();
-    const subjectDid = myDid;
+    const subjectDid = existingDid;
 
     const teacherData = new TeacherCredentialData(
       teacherName,
@@ -595,7 +598,7 @@ async function handleTeacherRegistration(event) {
     });
 
     try {
-      const sendResult = await record.send(myDid);
+      const sendResult = await record.send(existingDid);
       console.log("Record sent successfully:", sendResult);
     } catch (error) {
       console.error("Error sending record:", error);
@@ -628,7 +631,7 @@ async function handleTeacherLogin() {
     if (!teacherCredential) {
       console.log("Querying DWN for teacher credential...");
 
-      const teacherDid = myDid;
+      const teacherDid = existingDid;
       const response = await web5.dwn.records.query({
         from: teacherDid,
         message: {
@@ -711,35 +714,28 @@ function updateUIForLoggedOutTeacher() {
   window.location.reload();
 }
 
-// working way to start app w/o existing Did & passphrase
-// async function initPlatform() {
-//   try {
-//     document.getElementById("loadingIndicator").style.display = "block";
+async function resolveDid(didResolver, did) {
+  try {
+    const didDocument = await didResolver.resolve(did);
+    console.log("DID Document:", didDocument);
+    return didDocument;
+  } catch (error) {
+    console.error("Error resolving DID:", error);
+    return null;
+  }
+}
 
-//     const connection = await Web5.connect();
-//     web5 = connection.web5;
-//     myDid = connection.did;
-
-//     const courseProtocol = await configProtocol();
-
-//     console.log("starting with DID:", myDid);
-
-//     document.getElementById("loadingIndicator").style.display = "none";
-//     console.log("protocol:", courseProtocol);
-
-//     const courses = await fetchCoursesByInstructor();
-//     if (courses) {
-//       displayCourses(courses);
-//     }
-//   } catch (error) {
-//     console.error("Error initializing the platform:", error);
-//   }
-// }
-
-// identity agent test
-async function initPlatform(existingDid, passphrase) {
+async function initPlatform(passphrase) {
   try {
     document.getElementById("loadingIndicator").style.display = "block";
+    const serviceEndpointNodes = await getTechPreviewDwnEndpoints();
+    const didOptions = await DidIonMethod.generateDwnOptions({
+      serviceEndpointNodes,
+    });
+
+    const didIon = await DidIonMethod.create(didOptions);
+
+    existingDid = didIon.did;
 
     const appData = new AppDataVault({
       store: new LevelStore("data/agent/vault"),
@@ -801,19 +797,29 @@ async function initPlatform(existingDid, passphrase) {
     const identityAgent = await IdentityAgent.create(agentOptions);
     await identityAgent.start({ passphrase });
 
-    const { web5 } = await Web5.connect({
+    await didManager.import({
+      did: didIon,
+      kms: "local",
+    });
+
+    const web5Connection = await Web5.connect({
       connectedDid: existingDid,
       agent: identityAgent,
     });
+    web5 = web5Connection.web5;
 
-    console.log("web5:", web5);
+    // console.log("web5:", web5);
 
-    const courseProtocol = await configProtocol(web5, existingDid);
+    const courseProtocol = await configProtocol();
+    if (courseProtocol) {
+      console.log("protocol:", courseProtocol);
+    } else {
+      console.log("Failed to configure protocol");
+    }
 
     console.log("starting with DID:", existingDid);
 
     document.getElementById("loadingIndicator").style.display = "none";
-    console.log("protocol:", courseProtocol);
 
     const courses = await fetchCoursesByInstructor();
     if (courses) {
@@ -823,82 +829,6 @@ async function initPlatform(existingDid, passphrase) {
     console.error("Error initializing the platform:", error);
   }
 }
-
-//user agent test
-// async function initWeb5UserAgentWithDid(existingDid) {
-//   const appData = new AppDataVault({
-//     store: new LevelStore("DATA/AGENT/APPDATA"),
-//   });
-
-//   const didManager = new DidManager({
-//     didMethods: [DidIonMethod, DidKeyMethod],
-//     store: new DidStoreDwn(),
-//   });
-
-//   const didResolver = new DidResolver({
-//     cache: new DidResolverCacheLevel(),
-//     didResolvers: [DidIonMethod, DidKeyMethod],
-//   });
-
-//   const dwnManager = await DwnManager.create({ didResolver });
-
-//   const identityManager = new IdentityManager({
-//     store: new IdentityStoreDwn(),
-//   });
-
-//   const localKmsDwn = new LocalKms({
-//     kmsName: "local",
-//     keyStore: new KeyStoreDwn({
-//       schema: "https://identity.foundation/schemas/web5/kms-key",
-//     }),
-//     privateKeyStore: new PrivateKeyStoreDwn(),
-//   });
-
-//   const localKmsMemory = new LocalKms({
-//     kmsName: "memory",
-//   });
-
-//   const keyManager = new KeyManager({
-//     kms: {
-//       local: localKmsDwn,
-//       memory: localKmsMemory,
-//     },
-//     store: new KeyStoreDwn({
-//       schema: "https://identity.foundation/schemas/web5/managed-key",
-//     }),
-//   });
-
-//   const rpcClient = new Web5RpcClient();
-
-//   const syncManager = new SyncManagerLevel();
-
-//   const userAgentOptions = {
-//     agentDid: existingDid,
-//     appData,
-//     didManager,
-//     didResolver,
-//     dwnManager,
-//     identityManager,
-//     keyManager,
-//     rpcClient,
-//     syncManager,
-//   };
-
-//   const userAgent = new Web5UserAgent(userAgentOptions);
-
-//   await userAgent.connectWithExistingDid(existingDid);
-
-//   return userAgent;
-// }
-
-// event listeners
-// const teacherNameInput = document.getElementById("teacherName");
-// const messageContainer = document.getElementById("messageContainer");
-
-// teacherNameInput.addEventListener("focus", function () {
-//   messageContainer.innerText = "";
-//   messageContainer.style.display = "none";
-// });
 
 document
   .getElementById("registerButton")
@@ -926,10 +856,8 @@ document.getElementById("publishNow").addEventListener("change", function () {
 });
 
 window.onload = function () {
-  const existingDid =
-    "did:ion:EiDuQnNAYkdK3-3ExIQcqgXuhPkBuCnMHWps7IKDt5VXug:eyJkZWx0YSI6eyJwYXRjaGVzIjpbeyJhY3Rpb24iOiJyZXBsYWNlIiwiZG9jdW1lbnQiOnsicHVibGljS2V5cyI6W3siaWQiOiJkd24tc2lnIiwicHVibGljS2V5SndrIjp7ImNydiI6IkVkMjU1MTkiLCJrdHkiOiJPS1AiLCJ4IjoieV9wRWRmcnowU0RLRkJ2S01fOUdydmZ2WGtTT3pNV0pEeVFiTk13ZHl0NCJ9LCJwdXJwb3NlcyI6WyJhdXRoZW50aWNhdGlvbiJdLCJ0eXBlIjoiSnNvbldlYktleTIwMjAifSx7ImlkIjoiZHduLWVuYyIsInB1YmxpY0tleUp3ayI6eyJjcnYiOiJzZWNwMjU2azEiLCJrdHkiOiJFQyIsIngiOiIyT2lFZVRVSW1uR0oxUjNPNlhjYWlYdHZoQVZ4UG9PUU12RDZHdFRYNV93IiwieSI6ImczUVg2R0QzMXR6NjIwVy1XRV9sQ05jV1FmcTFRd3VrOFJaNjJZczBFZlkifSwicHVycG9zZXMiOlsia2V5QWdyZWVtZW50Il0sInR5cGUiOiJKc29uV2ViS2V5MjAyMCJ9XSwic2VydmljZXMiOlt7ImlkIjoiZHduIiwic2VydmljZUVuZHBvaW50Ijp7ImVuY3J5cHRpb25LZXlzIjpbIiNkd24tZW5jIl0sIm5vZGVzIjpbImh0dHBzOi8vZHduLnRiZGRldi5vcmcvZHduNSIsImh0dHBzOi8vZHduLnRiZGRldi5vcmcvZHduMyJdLCJzaWduaW5nS2V5cyI6WyIjZHduLXNpZyJdfSwidHlwZSI6IkRlY2VudHJhbGl6ZWRXZWJOb2RlIn1dfX1dLCJ1cGRhdGVDb21taXRtZW50IjoiRWlCaUZrcVYtaC1nU3czOTA3QzQ3VUtsT1ZvMU1ueUI0azlFME1rS01yODdNUSJ9LCJzdWZmaXhEYXRhIjp7ImRlbHRhSGFzaCI6IkVpQjJTUW9VRVdqRGZpUlFrOGFhODJhOWpUemltX0lfa181SXBOSGJxdC1vVFEiLCJyZWNvdmVyeUNvbW1pdG1lbnQiOiJFaUF1UjZYai1xX1hXWWhDSTJBUjdvRHl0SzFsZXU0V2JOeUJyRm55YjB6N1FnIn19";
-  const passphrase = "temporary-passphrase-for-testing";
-  initPlatform(existingDid, passphrase);
+  const passphrase = "temp-passphrase";
+  initPlatform(passphrase);
   // initPlatform();
   // handleTeacherLogin();
 };
